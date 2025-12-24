@@ -1,0 +1,84 @@
+//api_helper
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.6
+
+
+
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class ApiService {
+  // Method to fetch posts
+  Future<List<dynamic>> fetchPosts() async {
+    final response = await http.get(
+      Uri.parse("https://jsonplaceholder.typicode.com/posts"),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body); // Convert JSON to List
+    } else {
+      throw Exception("Failed to load posts");
+    }
+  }
+}
+//main--------------------
+import 'package:flutter/material.dart';
+import 'post_list.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  MaterialApp materialApp = const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: PostListScreen(),
+  );
+
+  runApp(materialApp);
+}
+//post_list-------------------------
+import 'package:flutter/material.dart';
+import 'api_helper.dart';
+
+class PostListScreen extends StatefulWidget {
+  const PostListScreen({super.key});
+
+  @override
+  State<PostListScreen> createState() => PostListScreenState();
+}
+
+class PostListScreenState extends State<PostListScreen> {
+  final ApiService apiService = ApiService(); // Object created
+
+  @override
+  Widget build(BuildContext context) {
+    AppBar appBar = AppBar(title: const Text("Posts from API"));
+
+    FutureBuilder futureBuilder = FutureBuilder<List<dynamic>>(
+      future: apiService.fetchPosts(), // Using object method
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        List<dynamic> posts = snapshot.data!;
+
+        return ListView.builder(
+          itemCount: posts.length,
+          itemBuilder: (context, index) {
+            var post = posts[index];
+            return ListTile(
+              leading: CircleAvatar(child: Text("${post["id"]}")),
+              title: Text(post["title"]),
+              subtitle: Text(post["body"]),
+            );
+          },
+        );
+      },
+    );
+
+    Scaffold scaffold = Scaffold(appBar: appBar, body: futureBuilder);
+    return scaffold;
+  }
+}
