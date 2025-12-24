@@ -1,0 +1,381 @@
+//main file-------------------------
+/*
+
+sqflite: ^2.2.8+4
+path_provider: ^2.0.15
+*/
+
+
+
+import 'package:flutter/material.dart';
+import 'user_form_screen.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  MaterialApp materialApp = MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: UserFormScreen(),
+  );
+
+  runApp(materialApp);
+}
+//database helpar----------------------------------
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+
+class DatabaseHelper {
+  // --- Step 1: Create a private static instance ---
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
+
+  // --- Step 2: Use a factory constructor to always return the same instance ---
+  factory DatabaseHelper() {
+    return _instance;
+  }
+
+  // --- Step 3: Private named constructor (can only be called inside this class) ---
+  DatabaseHelper._internal();
+
+  // --- Step 4: Declare the database variable ---
+  Database? _db;
+
+  Future<Database> get database async {
+    if (_db != null) return _db!;
+    _db = await _initDatabase();
+    return _db!;
+  }
+
+  Future<Database> _initDatabase() async {
+    String path = join(await getDatabasesPath(), "users.db");
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) {
+        return db.execute('''
+          CREATE TABLE users(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            email TEXT,
+            password TEXT
+          )
+        ''');
+      },
+    );
+  }
+
+  Future<int> insertUser(Map<String, dynamic> user) async {
+    final db = await database;
+    return await db.insert("users", user);
+  }
+
+  Future<List<Map<String, dynamic>>> getUsers() async {
+    final db = await database;
+    return await db.query("users");
+  }
+  
+  
+  Future<Map<String, dynamic>?> getUserById(int id) async {
+  final db = await database;
+  List<Map<String, dynamic>> results =
+      await db.query("users", where: "id = ?", whereArgs: [id]);
+  if (results.isNotEmpty) {
+    return results.first;
+  }
+  return null;
+}
+
+Future<int> updateUser(int id, Map<String, dynamic> user) async {
+  final db = await database;
+  return await db.update(
+    "users",
+    user,
+    where: "id = ?",
+    whereArgs: [id],
+  );
+}
+
+Future<int> deleteUser(int id) async {
+  final db = await database;
+  return await db.delete(
+    "users",
+    where: "id = ?",
+    whereArgs: [id],
+  );
+}
+
+  
+  
+  
+  
+  
+  
+  
+}
+//user_details------------------------------------
+import 'package:flutter/material.dart';
+import 'database_helper.dart';
+import 'user_edit_screen.dart';
+
+class UserDetailScreen extends StatelessWidget {
+  final int userId;
+  final DatabaseHelper dbHelper = DatabaseHelper();
+
+  UserDetailScreen({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: dbHelper.getUserById(userId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Scaffold(
+            appBar: AppBar(title: Text("User Detail")),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        var user = snapshot.data!;
+        return Scaffold(
+          appBar: AppBar(title: Text("User Detail")),
+          body: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Username: ${user["username"]}",
+                    style: TextStyle(fontSize: 18)),
+                Text("Email: ${user["email"]}",
+                    style: TextStyle(fontSize: 18)),
+                Text("Password: ${user["password"]}",
+                    style: TextStyle(fontSize: 18)),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  child: Text("Edit"),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => UserEditScreen(user: user),
+                      ),
+                    );
+                  },
+                ),
+                ElevatedButton(
+                  child: Text("Delete"),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () async {
+                    await dbHelper.deleteUser(userId);
+                    Navigator.pop(context); // go back after delete
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+//user form-----------------------
+import 'package:flutter/material.dart';
+import 'database_helper.dart';
+import 'user_list_screen.dart';
+
+class UserFormScreen extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => UserFormScreenState();
+}
+
+class UserFormScreenState extends State<UserFormScreen> {
+  final TextEditingController usernameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  final DatabaseHelper dbHelper = DatabaseHelper();
+
+  Future<void> saveUser() async {
+    String username = usernameController.text;
+    String email = emailController.text;
+    String password = passwordController.text;
+
+    if (username.isNotEmpty && email.isNotEmpty && password.isNotEmpty) {
+      await dbHelper.insertUser({
+        "username": username,
+        "email": email,
+        "password": password,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("User Saved!")),
+      );
+
+      usernameController.clear();
+      emailController.clear();
+      passwordController.clear();
+    }
+  }
+
+  void loadUsers() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => UserListScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    AppBar appBar = AppBar(title: Text("SQLite User Form"));
+
+    Column column = Column(
+      children: [
+        TextField(
+          controller: usernameController,
+          decoration: InputDecoration(labelText: "Username"),
+        ),
+        TextField(
+          controller: emailController,
+          decoration: InputDecoration(labelText: "Email"),
+        ),
+        TextField(
+          controller: passwordController,
+          obscureText: true,
+          decoration: InputDecoration(labelText: "Password"),
+        ),
+        SizedBox(height: 20),
+        ElevatedButton(onPressed: saveUser, child: Text("Save")),
+        ElevatedButton(onPressed: loadUsers, child: Text("View Users")),
+      ],
+    );
+
+    Scaffold scaffold = Scaffold(
+      appBar: appBar,
+      body: Padding(padding: EdgeInsets.all(16), child: column),
+    );
+
+    return scaffold;
+  }
+}
+//user_list--------------------------------
+import 'package:flutter/material.dart';
+import 'database_helper.dart';
+import 'user_detail_screen.dart';
+
+class UserListScreen extends StatelessWidget {
+  final DatabaseHelper dbHelper = DatabaseHelper();
+
+  @override
+  Widget build(BuildContext context) {
+    AppBar appBar = AppBar(title: Text("User List"));
+
+    FutureBuilder futureBuilder = FutureBuilder<List<Map<String, dynamic>>>(
+      future: dbHelper.getUsers(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        List<Map<String, dynamic>> users = snapshot.data!;
+
+        if (users.isEmpty) {
+          return Center(child: Text("No users found."));
+        }
+
+        return ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            var user = users[index];
+            return ListTile(
+              title: Text(user["username"]),
+              subtitle: Text(user["email"]),
+              trailing: Text(user["password"]),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UserDetailScreen(userId: user["id"]),
+                  ),
+                );
+              },
+
+            );
+          },
+        );
+      },
+    );
+
+    Scaffold scaffold = Scaffold(appBar: appBar, body: futureBuilder);
+    return scaffold;
+  }
+}
+//user_edit-------------------------------------------------------
+import 'package:flutter/material.dart';
+import 'database_helper.dart';
+
+class UserEditScreen extends StatefulWidget {
+  final Map<String, dynamic> user;
+
+  UserEditScreen({required this.user});
+
+  @override
+  State<UserEditScreen> createState() => UserEditScreenState();
+}
+
+class UserEditScreenState extends State<UserEditScreen> {
+  late TextEditingController usernameController;
+  late TextEditingController emailController;
+  late TextEditingController passwordController;
+
+  final DatabaseHelper dbHelper = DatabaseHelper();
+
+  @override
+  void initState() {
+    super.initState();
+    usernameController =
+        TextEditingController(text: widget.user["username"]);
+    emailController = TextEditingController(text: widget.user["email"]);
+    passwordController =
+        TextEditingController(text: widget.user["password"]);
+  }
+
+  Future<void> updateUser() async {
+    await dbHelper.updateUser(widget.user["id"], {
+      "username": usernameController.text,
+      "email": emailController.text,
+      "password": passwordController.text,
+    });
+
+    Navigator.pop(context); // back to detail screen
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Edit User")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: usernameController,
+              decoration: InputDecoration(labelText: "Username"),
+            ),
+            TextField(
+              controller: emailController,
+              decoration: InputDecoration(labelText: "Email"),
+            ),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: InputDecoration(labelText: "Password"),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: updateUser,
+              child: Text("Update"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
